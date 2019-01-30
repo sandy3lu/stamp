@@ -12,7 +12,10 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.security.NoSuchProviderException;
+import java.security.cert.CertificateException;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 
 /**
@@ -37,32 +40,82 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
 
 
     @Override
-    public TbEseal generate(String creatorID, String userType, int type, String userID, String name, String usage, String esID, String pic, String createPic, String validEnd, String isScene) {
+    public TbEseal generate(String creatorID, String creatorType, int type, String userID, String name, String usage,
+                            String esID, String pic, int createPicType, String validEnd, String isScene) {
 
-        TbCertkey tbCertkey=null;
-        switch (userType.toUpperCase()){
-            case "OPERATOR":
-                tbCertkey = checkValidCertExist(userID);
-                if(tbCertkey == null){
-                    // apply cert
-                    tbCertkey = applyCert(userID,type, isScene,usage,esID,false);
-                }
-                break;
-                default:
-                    tbCertkey = checkValidCertExist(creatorID);
-                    if(tbCertkey == null){
-                        // apply cert
-                        tbCertkey = applyCert(creatorID,type, isScene, usage,esID,true);
-                    }
+        if(type == TYPE_PERSONAL){
+            if((createPicType == PIC_TYPE_OVAL) ||(createPicType == PIC_TYPE_ROUND)){
+                throw new RuntimeException("type does not match createPicType");
+            }
+        }else{
+            if(createPicType == PIC_TYPE_PERSONAL){
+                throw new RuntimeException("type does not match createPicType");
+            }
         }
 
-        //
+        //step 1 get signer cert
+        TbCertkey tbCertkey=null;
+        boolean selfapply = true;
+        try {
+            switch (creatorType.toUpperCase()) {
+                case "OPERATOR":
+                    selfapply = false;
+                    tbCertkey = checkValidCertExist(userID);
+                    if (tbCertkey == null) {
+                        // apply cert
+                        tbCertkey = applyCert(userID, type, isScene, usage, esID, selfapply);
+                    }
+                    break;
+                default:
+                    tbCertkey = checkValidCertExist(creatorID);
+                    if (tbCertkey == null) {
+                        // apply cert
+                        tbCertkey = applyCert(creatorID, type, isScene, usage, esID, selfapply);
+                    }
+            }
 
+            //
+        }catch (Exception e){
+            throw new RuntimeException(e.getMessage());
+        }
+
+        //step 2 get pic
+        byte[] picdata= null;
+        switch (createPicType){
+            case PIC_TYPE_OVAL:
+            case PIC_TYPE_ROUND:
+                // company pic
+                picdata = generateCompanyPic(type,tbCertkey,createPicType);
+                break;
+            case PIC_TYPE_PERSONAL:
+                // personal pic
+                picdata = generatePersonalPic(usage);
+                break;
+                default:
+                    picdata = Base64.getUrlDecoder().decode(pic);
+        }
+
+        //step 3 generate stamp
 
 
     }
 
-    private TbCertkey applyCert(String userID, int type, String isScene, String usage,String esID, boolean selfapply) {
+    private byte[] generateCompanyPic(int type, TbCertkey tbCertkey, int createPicType) {
+        //专用章一律为圆形，中心部位一律为空白，直径为4，0cm，圆边宽为0，1cm，上弧为单位名称，自左而右环行，专用章内容放在章的下边作横排，印文使用简化的宋体字。
+
+        //中外合资（合作），外商独资经营企业的印章
+        //
+        //规格为椭圆形，横径为4.5cm，竖径为3.0cm，中央不刊五角星（要求刻企业标志可准予），企业名称自左而右环行，或自左而右横排，根椐用章单位的要求，可刻制钢印和中英文印章
+
+        return new byte[0];
+    }
+
+    private byte[] generatePersonalPic(String usage) {
+
+        return new byte[0];
+    }
+
+    private TbCertkey applyCert(String userID, int type, String isScene, String usage,String esID, boolean selfapply) throws CertificateException, NoSuchProviderException {
 
         CertInfo certInfo = new CertInfo();
 

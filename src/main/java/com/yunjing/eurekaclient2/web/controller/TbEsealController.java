@@ -29,14 +29,14 @@ public class TbEsealController {
 
     @PostMapping("/eseal")
     @ApiOperation("产生印章")
-    public ResultInfo generateEseal(@RequestParam("creatorId")String creatorID,@RequestParam("userType")String userType, @RequestParam("type")int type,
-                                    @RequestParam(value = "userId")String userID,
+    public ResultInfo generateEseal(@RequestParam("creatorId")String creatorID,@RequestParam("creatorType")String creatorType, @RequestParam("type")int type,
+                                    @RequestParam(value = "userId",defaultValue = "", required = false)String userID,
                                     @RequestParam("name")String name,@RequestParam("usage")String usage,@RequestParam("esId")String esId,
                                     @RequestParam(value = "pic",defaultValue = "", required = false)String pic,
-                                    @RequestParam(value = "createPic",defaultValue = "false", required = false)String createPic,
-                                    @RequestParam("validEnd")String validEnd,@RequestParam("isScene")String isScene){
+                                    @RequestParam(value = "createPicType",defaultValue = "0", required = false)int createPicType,
+                                    @RequestParam(value ="validEnd",defaultValue = "", required = false)String validEnd,@RequestParam("isScene")String isScene){
 
-        TbEseal eseal =tbEsealService.generate(creatorID, userType, type, userID, name, usage, esId, pic, createPic, validEnd, isScene);
+        TbEseal eseal =tbEsealService.generate(creatorID, creatorType, type, userID, name, usage, esId, pic, createPicType, validEnd, isScene);
         return ResultInfo.ok().put("esSN", eseal.getId()).put("esId", eseal.getEsId());
 
     }

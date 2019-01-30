@@ -19,5 +19,9 @@ public interface TbEsealService extends IService<TbEseal> {
     int TYPE_CONTRACT = 4;
     int TYPE_PERSONAL =5;
 
-    TbEseal generate(String creatorID, String userType, int type, String userID, String name, String usage, String esId, String pic, String createPic, String validEnd, String isScene);
+    int PIC_TYPE_OVAL = 1;
+    int PIC_TYPE_ROUND= 2;
+    int PIC_TYPE_PERSONAL = 3;
+
+    TbEseal generate(String creatorID, String creatorType, int type, String userID, String name, String usage, String esId, String pic, int createPic, String validEnd, String isScene);
 }
