@@ -17,9 +17,9 @@ import java.util.List;
  */
 public interface TbCertkeyService extends IService<TbCertkey> {
 
-    List<TbCertkey> getCertkey(String userID);
+    List<TbCertkey> getCertkey(String userID, String IDCard);
 
-    TbCertkey insert(String cert, int keyindex, String userID) throws CertificateException, NoSuchProviderException;
+    TbCertkey insert(String cert, int keyindex, String userID, String IDCard) throws CertificateException, NoSuchProviderException;
 
     int getKeyID(String certKeyList);
 }

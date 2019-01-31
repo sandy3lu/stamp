@@ -23,9 +23,14 @@ public class TbCertkey extends BaseEntity {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 使用证书的用户id
+     * 使用证书的企业用户id
      */
     private String userId;
+
+    /**
+     * 使用证书的个人用户
+     */
+    private String idCard;
 
     /**
      * 证书sn
@@ -41,6 +46,8 @@ public class TbCertkey extends BaseEntity {
      * 证书数据
      */
     private String cert;
+
+    private int isScene;
 
     /**
      * 证书关联的密钥id

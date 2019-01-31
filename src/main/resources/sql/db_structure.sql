@@ -41,8 +41,10 @@ PRIMARY KEY (`id`)
 CREATE TABLE `tb_certkey`(
 `id` int NOT NULL COMMENT 'id,从eseal表挪过来的数据' ,
 `user_id` varchar(64) not null COMMENT '使用这个证书的企业的user_id',
+`id_card` varchar(64) not null COMMENT '企业替个人用户申请证书时，保存用户的身份证号',
 `cert_sn` varchar(256) not null COMMENT '证书sn',
 `cert_hash` varchar(256) default null COMMENT '证书hash',
+`is_scene` int(1) not null COMMENT '是否为场景证书',
 `cert` blob not null COMMENT '证书数据',
 `end_time` datetime not null COMMENT '证书有效时间',
 `key_id` int not null COMMENT '证书关联的密钥id',

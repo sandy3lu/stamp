@@ -114,14 +114,25 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
     public TbEseal generate(String creatorID, String creatorType, int type, String userID, String name, String usage,
                             String esID, String pic, int createPicType, String validEnd, String isScene) throws CertificateException, NoSuchProviderException, IOException {
 
+        String cardID="";
         if(type == TYPE_PERSONAL){
-            if((createPicType == PIC_TYPE_OVAL) ||(createPicType == PIC_TYPE_ROUND)){
-                throw new RuntimeException("type does not match createPicType");
-            }
+            cardID = esID;
+        }
 
-        }else{
-            if(createPicType == PIC_TYPE_PERSONAL){
-                throw new RuntimeException("type does not match createPicType");
+        byte[] picdata= null;
+        if(pic.length()<10) {
+            // create pic
+            if (type == TYPE_PERSONAL) {
+                // personal stamp
+                if ((createPicType == PIC_TYPE_OVAL) || (createPicType == PIC_TYPE_ROUND)) {
+                    throw new RuntimeException("personal mush create square stamp");
+                }
+
+            } else {
+                // company stamp
+                if (createPicType == PIC_TYPE_PERSONAL) {
+                    throw new RuntimeException("company can not create square stamp");
+                }
             }
         }
 
@@ -136,17 +147,34 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
                 default:
                     userID = creatorID;
             }
-            tbCertkey = checkValidCertExist(userID);
-            if (tbCertkey == null) {
-                // apply cert
-                tbCertkey = applyCert(userID, type, isScene, usage, esID, selfapply);
+
+            if(isScene.toLowerCase().equals("true")){
+                // apply scene cert for company or personal
+                if(type != TYPE_PERSONAL) {
+                    tbCertkey = applyCompanyCert(userID, isScene, selfapply);
+                }else {
+                    tbCertkey = applyPersonalCert(userID, isScene, usage, cardID);
+                }
+            }else{
+                if(type != TYPE_PERSONAL) {
+                    tbCertkey = checkValidCompanyCert(userID);
+                }else{
+                    tbCertkey = checkValidPersonalCert(userID, cardID);
+                }
+                if (tbCertkey == null) {
+                    if(type != TYPE_PERSONAL) {
+                        tbCertkey = applyCompanyCert(userID,  isScene,  selfapply);
+                    }else {
+                        tbCertkey = applyPersonalCert(userID,  isScene, usage, cardID);
+                    }
+                }
             }
+
         }catch (Exception e){
             throw new RuntimeException(e.getMessage());
         }
 
         //step 2 get pic
-        byte[] picdata= null;
         switch (createPicType){
             case PIC_TYPE_OVAL:
                 picdata = generateCompanyOvalPic(type,tbCertkey);
@@ -159,14 +187,14 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
                 // personal pic
                 picdata = generatePersonalPic(usage);
                 break;
-                default:
-                    picdata = Base64.getUrlDecoder().decode(pic);
+            default:
+                picdata = Base64.getUrlDecoder().decode(pic);
         }
 
         //step 3 generate stamp
         String picFormat=getImageFormat(picdata);
-        int width=20;
-        int height=20;
+        int width;
+        int height;
 
         switch (createPicType){
             case PIC_TYPE_OVAL:
@@ -247,6 +275,7 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
         String userID = null;
         int type = 0;
         String usage = null;
+        String certList = null;
         if(tbEseal==null){
 
             TbEsealExpire tbEsealExpire = tbEsealExpireService.get(oldEsSN);
@@ -256,14 +285,24 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
             userID = tbEsealExpire.getUserId();
             type = tbEsealExpire.getType();
             usage = tbEsealExpire.getUsage();
+            certList = tbEsealExpire.getCertKeyList();
         }else{
             userID = tbEseal.getUserId();
             type = tbEseal.getType();
             usage = tbEseal.getUsage();
+            certList = tbEseal.getCertKeyList();
+        }
+
+        if(type == TYPE_PERSONAL){
+            // 企业更新 其帮助申请的 个人章
+            TbCertkey  tbCertkey = checkValidPersonalCert(userID);
+
+        }else{
+            // 企业更新自己的章
+            TbCertkey  tbCertkey = checkValidCompanyCert(userID);
 
         }
 
-        TbCertkey  tbCertkey = checkValidCertExist(userID);
         LocalDateTime end = tbCertkey.getEndTime();
         LocalDateTime ref = OtherUtil.plus(LocalDateTime.now(),31, ChronoUnit.DAYS);
         if(end.isBefore(ref)){
@@ -334,76 +373,78 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
         return imgGen.genRectangleSeal(usage);
     }
 
-    private TbCertkey applyCert(String userID, int type, String isScene, String usage,String IDCard, boolean selfapply) throws CertificateException, NoSuchProviderException {
+    private TbCertkey applyCompanyCert(String userID, String isScene,  boolean selfapply) throws CertificateException, NoSuchProviderException {
 
         CertInfo certInfo = new CertInfo();
 
-        if(type == TYPE_PERSONAL){
+        // company cert
+        String result = null;
+        if(selfapply){
+            result = userServiceRemote.getSelfInfo();
+        }else{
+            result = userServiceRemote.getEnterpriseInfo(userID);
+        }
 
-            if(isScene.toLowerCase().contains("false")) {
-                // person cert
-                certInfo.setType(1);
-                String result = userServiceRemote.getUserInfo(userID);
-                net.sf.json.JSONObject jsonObject= net.sf.json.JSONObject.fromObject(result);
+        net.sf.json.JSONObject jsonObject= net.sf.json.JSONObject.fromObject(result);
+        Object obj = jsonObject.get("orgCode");
+        if(obj!=null){
+            certInfo.setId((String)obj);
+        }else {
+            certInfo.setId("");
+        }
+         obj = jsonObject.get("company");
+        if(obj!=null){
+            certInfo.setName((String)obj);
+        }else {
+            certInfo.setName("");
+        }
 
-                // card number
-                certInfo.setId(IDCard);
-                // person name
-                certInfo.setName(usage);
-                Object obj = jsonObject.get("email");
-                if(obj!=null){
-                    certInfo.setEmail((String)obj);
-                }else {
-                    certInfo.setEmail("");
-                }
-                certInfo.setImage("");
-                obj = jsonObject.get("phone");
-                if(obj!=null){
-                    certInfo.setPhoneNumber((String)obj);
-                }else {
-                    certInfo.setPhoneNumber("");
+        certInfo.setEmail("");
+        certInfo.setImage("");
+        certInfo.setPhoneNumber("");
+        if(isScene.toLowerCase().contains("false")){
+            certInfo.setType(2);
+        }else{
+            // scene cert
+            certInfo.setType(3);
+        }
 
-                }
-            }else{
-                // scene cert
-                certInfo.setType(3);
-                // card number
-                certInfo.setId(IDCard);
-                // person name
-                certInfo.setName(usage);
-                certInfo.setEmail("");
+        String cert_result = certServiceRemote.apply(certInfo,userID);
+        net.sf.json.JSONObject cert_jsonObject= net.sf.json.JSONObject.fromObject(cert_result);
+        Object cert = cert_jsonObject.get("certData");
+        if(cert==null){
+            //fail
+            throw new RuntimeException(result);
+        }
 
-                certInfo.setImage("");
-                certInfo.setPhoneNumber("");
-               }
+        int keyindex = (int)cert_jsonObject.get("keyId");
+        TbCertkey tbCertkey = tbCertkeyService.insert((String)cert, keyindex,userID, "");
+        return tbCertkey;
+    }
+
+    private TbCertkey applyPersonalCert(String userID, String isScene, String usage,String IDCard) throws CertificateException, NoSuchProviderException {
+
+        CertInfo certInfo = new CertInfo();
+
+        // card number
+        certInfo.setId(IDCard);
+        // person name
+        certInfo.setName(usage);
+        certInfo.setEmail("");
+        certInfo.setImage("");
+        certInfo.setPhoneNumber("");
+
+        if(isScene.toLowerCase().contains("false")) {
+            // person cert
+            certInfo.setType(1);
+
+            // 已注册用户自己申请证书，目前Paas平台都是企业替用户申请，用户没有注册
+            //String result = userServiceRemote.getUserInfo(userID);
+            //net.sf.json.JSONObject jsonObject= net.sf.json.JSONObject.fromObject(result);
 
         }else{
-            // company cert
-            String result = null;
-            if(selfapply){
-                result = userServiceRemote.getSelfInfo();
-            }else{
-                result = userServiceRemote.getEnterpriseInfo(userID);
-            }
-
-            net.sf.json.JSONObject jsonObject= net.sf.json.JSONObject.fromObject(result);
-            Object obj = jsonObject.get("orgCode");
-            if(obj!=null){
-                certInfo.setId((String)obj);
-            }else {
-                certInfo.setId("");
-            }
-             obj = jsonObject.get("company");
-            if(obj!=null){
-                certInfo.setName((String)obj);
-            }else {
-                certInfo.setName("");
-            }
-
-            certInfo.setEmail("");
-            certInfo.setImage("");
-            certInfo.setPhoneNumber("");
-            certInfo.setType(2);
+            // scene cert
+            certInfo.setType(3);
         }
 
         String result = certServiceRemote.apply(certInfo,userID);
@@ -415,14 +456,42 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
         }
 
         int keyindex = (int)jsonObject.get("keyId");
-        TbCertkey tbCertkey = tbCertkeyService.insert((String)cert, keyindex,userID);
+        TbCertkey tbCertkey = tbCertkeyService.insert((String)cert, keyindex,userID,IDCard);
         return tbCertkey;
     }
 
 
-    private TbCertkey checkValidCertExist(String applierID){
+    private TbCertkey checkValidCompanyCert(String applierID){
 
-        List<TbCertkey> list = tbCertkeyService.getCertkey(applierID);
+        List<TbCertkey> list = tbCertkeyService.getCertkey(applierID, "");
+        if((list == null) || (list.size()<1)){
+            return null;
+        }else{
+            //TODO: make sure this will get the latest
+            TbCertkey tbCertkey=list.get(0);
+            LocalDateTime end = tbCertkey.getEndTime();
+            if(end.isBefore(LocalDateTime.now())){
+                // cert is overdue, need apply a new cert
+                return null;
+            }else{
+                // check cert
+                String result = certServiceRemote.validate(tbCertkey.getCertSn(),applierID);
+                net.sf.json.JSONObject jsonObject= net.sf.json.JSONObject.fromObject(result);
+                Object obj = jsonObject.get("result");
+                if(obj!=null){
+                    String s = (String)obj;
+                    if(s.toLowerCase().contains("true")){
+                        return tbCertkey;
+                    }
+                }
+                return null;
+            }
+        }
+    }
+
+    private TbCertkey checkValidPersonalCert(String applierID,String IDCard){
+
+        List<TbCertkey> list = tbCertkeyService.getCertkey(applierID, IDCard);
         if((list == null) || (list.size()<1)){
             return null;
         }else{

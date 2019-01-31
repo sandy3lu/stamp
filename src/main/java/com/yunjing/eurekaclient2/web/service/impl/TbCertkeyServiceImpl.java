@@ -9,21 +9,14 @@ import com.yunjing.eurekaclient2.web.entity.TbCertkey;
 import com.yunjing.eurekaclient2.web.mapper.TbCertkeyMapper;
 import com.yunjing.eurekaclient2.web.service.TbCertkeyService;
 
-import org.bouncycastle.crypto.digests.SM3Digest;
-import org.bouncycastle.pqc.math.linearalgebra.ByteUtils;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
 import java.security.NoSuchProviderException;
-import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
@@ -40,9 +33,10 @@ import java.util.List;
 public class TbCertkeyServiceImpl extends ServiceImpl<TbCertkeyMapper, TbCertkey> implements TbCertkeyService {
 
     @Override
-    public List<TbCertkey> getCertkey(String userID) {
+    public List<TbCertkey> getCertkey(String userID, String IDCard) {
         QueryWrapper<TbCertkey> wrapper = new QueryWrapper<>();
         wrapper.eq("user_id",userID);
+        wrapper.eq("id_card",IDCard);
         wrapper.orderByAsc("end_time");
         //TODO: check order
         List<TbCertkey> list = this.list(wrapper);
@@ -51,7 +45,7 @@ public class TbCertkeyServiceImpl extends ServiceImpl<TbCertkeyMapper, TbCertkey
     }
 
     @Override
-    public TbCertkey insert(String cert, int keyindex, String userID) throws CertificateException, NoSuchProviderException {
+    public TbCertkey insert(String cert, int keyindex, String userID, String IDCard) throws CertificateException, NoSuchProviderException {
         TbCertkey tbCertkey = new TbCertkey();
         tbCertkey.setKeyId(keyindex);
         tbCertkey.setUserId(userID);
@@ -65,6 +59,7 @@ public class TbCertkeyServiceImpl extends ServiceImpl<TbCertkeyMapper, TbCertkey
         tbCertkey.setCertSn(sn.toString(16));
         Date end = x509Certificate.getNotAfter();
         tbCertkey.setEndTime(OtherUtil.getFromDate(end));
+        tbCertkey.setIdCard(IDCard);
         this.save(tbCertkey);
         return tbCertkey;
     }

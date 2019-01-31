@@ -35,18 +35,23 @@ public class TbEsealController {
     @Autowired
     TbEsealExpireService tbEsealExpireService;
 
+    private String USER_TYPE_OPERATOR= "OPERATOR";
+    private String USER_TYPE_PAAS_CLIENT = "PAAS_CLIENT";
+
     @PostMapping("/eseal")
     @ApiOperation("产生印章")
-    public ResultInfo generateEseal(@RequestParam("creatorId")String creatorID,@RequestParam("creatorType")String creatorType, @RequestParam("type")int type,
-                                    @RequestParam(value = "userId",defaultValue = "", required = false)String userID,
+    public ResultInfo generateEseal(@RequestParam("creatorId")String creatorID,@RequestParam("creatorType")String creatorType,
+                                    @RequestParam("type")int type,
+                                    @RequestParam("userId")String userID,
                                     @RequestParam("name")String name,@RequestParam("usage")String usage,@RequestParam("esId")String esId,
-                                    @RequestParam(value = "pic",defaultValue = "", required = false)String pic,
-                                    @RequestParam(value = "createPicType",defaultValue = "0", required = false)int createPicType,
-                                    @RequestParam(value ="validEnd",defaultValue = "", required = false)String validEnd,@RequestParam("isScene")String isScene){
+                                    @RequestParam(value = "pic",defaultValue = "")String pic,
+                                    @RequestParam(value = "createPicType",defaultValue = "0")int createPicType,
+                                    @RequestParam(value ="validEnd",defaultValue = "", required = false)String validEnd,
+                                    @RequestParam(value = "isScene",defaultValue = "false",required = false)String isScene){
 
-        TbEseal eseal = null;
+
         try {
-            eseal = tbEsealService.generate(creatorID, creatorType, type, userID, name, usage, esId, pic, createPicType, validEnd, isScene);
+            TbEseal eseal = tbEsealService.generate(creatorID, creatorType, type, userID, name, usage, esId, pic, createPicType, validEnd, isScene);
             if(eseal == null){
                 return ResultInfo.error("generate eseal error!");
             }
@@ -108,6 +113,28 @@ public class TbEsealController {
             return ResultInfo.error("update eseal " + oldEsSN + "error");
         }
         return ResultInfo.ok().put("esSN", eseal.getId()).put("esId", eseal.getEsId());
+    }
+
+
+    @DeleteMapping("/frozen")
+    @ApiOperation("冻结/解冻印章")
+    public ResultInfo frozeEseal(@RequestParam("userId")String userId, @RequestParam("esSN")int esSN,@RequestParam(value = "comment",defaultValue = "", required = false)String comment){
+        TbEseal eseal = tbEsealService.get(esSN);
+        if(eseal!=null){
+            if((eseal.getCreatorId().equals(userId)) || (eseal.getUserId().equals(userId))){
+                boolean result = tbEsealService.revoke(eseal,comment);
+                if(result){
+                    return ResultInfo.ok();
+                }else{
+                    return ResultInfo.error("revoke failed!");
+                }
+
+            }else{
+                return ResultInfo.error(userId + " is not authorized");
+            }
+        }else{
+            return ResultInfo.error("could not find " + esSN);
+        }
     }
 
 }
