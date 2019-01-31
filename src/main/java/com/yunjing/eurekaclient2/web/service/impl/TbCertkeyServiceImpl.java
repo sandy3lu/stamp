@@ -56,7 +56,7 @@ public class TbCertkeyServiceImpl extends ServiceImpl<TbCertkeyMapper, TbCertkey
         X509Certificate x509Certificate = (X509Certificate)cf.generateCertificate(new ByteArrayInputStream(contents));
         BigInteger sn = x509Certificate.getSerialNumber();
         Date end = x509Certificate.getNotAfter();
-        
+
         tbCertkey.setCertSn();
         tbCertkey.setEndTime();
 
