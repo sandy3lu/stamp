@@ -20,4 +20,6 @@ public interface TbCertkeyService extends IService<TbCertkey> {
     List<TbCertkey> getCertkey(String userID);
 
     TbCertkey insert(String cert, int keyindex, String userID) throws CertificateException, NoSuchProviderException;
+
+    int getKeyID(String certKeyList);
 }

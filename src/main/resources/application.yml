@@ -39,7 +39,7 @@ user:
   define:
     crypto:
       useToken: false
-      keyfile: maker.pfx
+      makerkeyfile: maker.pfx
       password: yunjingit
       alias: privateKey
     cert:
@@ -49,5 +49,12 @@ user:
       email: support@yunjingit.com
       image: 77777777
       type: 2
-      userId: yunjing
-
+      userId: pms-eseal
+    pic:
+      round: 40
+      ovalw: 45
+      ovalh: 30
+      recw: 18
+      rech: 18
+    esid:
+      prefix: ESP

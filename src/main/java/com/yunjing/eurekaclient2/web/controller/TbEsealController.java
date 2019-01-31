@@ -3,14 +3,18 @@ package com.yunjing.eurekaclient2.web.controller;
 
 import com.yunjing.eurekaclient2.common.base.ResultInfo;
 import com.yunjing.eurekaclient2.web.entity.TbEseal;
+import com.yunjing.eurekaclient2.web.entity.TbEsealExpire;
+import com.yunjing.eurekaclient2.web.service.TbCertkeyService;
+import com.yunjing.eurekaclient2.web.service.TbEsealExpireService;
 import com.yunjing.eurekaclient2.web.service.TbEsealService;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.*;
 
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import java.io.IOException;
+import java.security.NoSuchProviderException;
+import java.security.cert.CertificateException;
+import java.util.Base64;
 
 /**
  * <p>
@@ -26,6 +30,10 @@ public class TbEsealController {
 
     @Autowired
     TbEsealService tbEsealService;
+    @Autowired
+    TbCertkeyService tbCertkeyService;
+    @Autowired
+    TbEsealExpireService tbEsealExpireService;
 
     @PostMapping("/eseal")
     @ApiOperation("产生印章")
@@ -36,11 +44,70 @@ public class TbEsealController {
                                     @RequestParam(value = "createPicType",defaultValue = "0", required = false)int createPicType,
                                     @RequestParam(value ="validEnd",defaultValue = "", required = false)String validEnd,@RequestParam("isScene")String isScene){
 
-        TbEseal eseal =tbEsealService.generate(creatorID, creatorType, type, userID, name, usage, esId, pic, createPicType, validEnd, isScene);
-        return ResultInfo.ok().put("esSN", eseal.getId()).put("esId", eseal.getEsId());
+        TbEseal eseal = null;
+        try {
+            eseal = tbEsealService.generate(creatorID, creatorType, type, userID, name, usage, esId, pic, createPicType, validEnd, isScene);
+            if(eseal == null){
+                return ResultInfo.error("generate eseal error!");
+            }
+            return ResultInfo.ok().put("esSN", eseal.getId()).put("esId", eseal.getEsId());
+        } catch (Exception e) {
+            return ResultInfo.error(e.getMessage());
+        }
 
     }
 
+    @GetMapping("/eseal")
+    @ApiOperation("查询印章")
+    public ResultInfo getEseal(@RequestParam("esSN")int esSN){
+        TbEseal eseal = tbEsealService.get(esSN);
+        if(eseal!=null){
+            int keyid = tbCertkeyService.getKeyID(eseal.getCertKeyList());
+            byte[] content = eseal.getContent().getBytes();
+            return ResultInfo.ok().put("content", Base64.getUrlEncoder().encodeToString(content)).put("sealStatus", eseal.getStatus()).put("keyID", keyid);
+        }else{
 
+            TbEsealExpire expire = tbEsealExpireService.get(esSN);
+            if(expire!=null){
+                int keyid = tbCertkeyService.getKeyID(expire.getCertKeyList());
+                byte[] content = expire.getContent().getBytes();
+                return ResultInfo.ok().put("content", Base64.getUrlEncoder().encodeToString(content)).put("sealStatus", expire.getStatus()).put("keyID", keyid);
+            }else {
+                return ResultInfo.error("could not find " + esSN);
+            }
+        }
+    }
+
+    @DeleteMapping("/eseal")
+    @ApiOperation("注销印章")
+    public ResultInfo revokeEseal(@RequestParam("userId")String userId, @RequestParam("esSN")int esSN,@RequestParam(value = "comment",defaultValue = "", required = false)String comment){
+        TbEseal eseal = tbEsealService.get(esSN);
+        if(eseal!=null){
+            if((eseal.getCreatorId().equals(userId)) || (eseal.getUserId().equals(userId))){
+                boolean result = tbEsealService.revoke(eseal,comment);
+                if(result){
+                    return ResultInfo.ok();
+                }else{
+                    return ResultInfo.error("revoke failed!");
+                }
+
+            }else{
+                return ResultInfo.error(userId + " is not authorized");
+            }
+        }else{
+            return ResultInfo.error("could not find " + esSN);
+        }
+    }
+
+
+    @PutMapping("/eseal")
+    @ApiOperation("更新印章")
+    public ResultInfo updateEseal(@RequestParam("userId")String userId, @RequestParam("oldEsSN")int oldEsSN){
+        TbEseal eseal = tbEsealService.updateEseal(oldEsSN);
+        if(eseal == null){
+            return ResultInfo.error("update eseal " + oldEsSN + "error");
+        }
+        return ResultInfo.ok().put("esSN", eseal.getId()).put("esId", eseal.getEsId());
+    }
 
 }

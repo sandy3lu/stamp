@@ -38,8 +38,8 @@ public class InitApplicationRunner implements ApplicationRunner {
     protected Logger logger = LoggerFactory.getLogger(getClass());
 
 
-    @Value("${user.define.crypto.keyfile}")
-    public String keyfile;
+    @Value("${user.define.crypto.makerkeyfile}")
+    public String makerkeyfile;
 
     @Value("${user.define.cert.name}")
     public String name;
@@ -64,12 +64,12 @@ public class InitApplicationRunner implements ApplicationRunner {
         logger.info("init...");
         Security.addProvider(new BouncyCastleProvider());
 
-        File f = new File(keyfile);
+        File f = new File(makerkeyfile);
 
         if (f.exists()) {
             //load into buffer to check file
             logger.info("load key and cert ...");
-            FileInputStream in = new FileInputStream(keyfile);
+            FileInputStream in = new FileInputStream(makerkeyfile);
             byte[] buffer = new byte[4096];
             int length = in.read(buffer);
             byte[] tmp = Arrays.copyOfRange(buffer,0,length);
@@ -82,7 +82,7 @@ public class InitApplicationRunner implements ApplicationRunner {
                 int keyindex = (int)jsonObject.get("keyId");
 
             }else{
-                logger.info("read cert file error : " + keyfile);
+                logger.info("read cert file error : " + makerkeyfile);
                 return;
             }
             logger.info("init end !");
@@ -108,7 +108,7 @@ public class InitApplicationRunner implements ApplicationRunner {
             Object obj = jsonObject.get("certData");
             if(obj!= null){
                  // save to file
-                FileOutputStream out = new FileOutputStream(keyfile);
+                FileOutputStream out = new FileOutputStream(makerkeyfile);
                 out.write(result.getBytes());
                 out.close();
             }else{

@@ -3,6 +3,8 @@ package com.yunjing.eurekaclient2.web.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.yunjing.eurekaclient2.common.utils.CryptoUtil;
+import com.yunjing.eurekaclient2.common.utils.OtherUtil;
 import com.yunjing.eurekaclient2.web.entity.TbCertkey;
 import com.yunjing.eurekaclient2.web.mapper.TbCertkeyMapper;
 import com.yunjing.eurekaclient2.web.service.TbCertkeyService;
@@ -56,29 +58,21 @@ public class TbCertkeyServiceImpl extends ServiceImpl<TbCertkeyMapper, TbCertkey
         //TODO: base64 or URL base64 parse cert
         byte[] contents = Base64.getUrlDecoder().decode(cert);
         tbCertkey.setCert(new String(contents));
-        tbCertkey.setCertHash(getDigest(contents));
+        tbCertkey.setCertHash(CryptoUtil.getDigest(contents));
         CertificateFactory cf = CertificateFactory.getInstance("X.509", "BC");
         X509Certificate x509Certificate = (X509Certificate)cf.generateCertificate(new ByteArrayInputStream(contents));
         BigInteger sn = x509Certificate.getSerialNumber();
         tbCertkey.setCertSn(sn.toString(16));
         Date end = x509Certificate.getNotAfter();
-
-        Instant instant = end.toInstant();
-        ZoneId zone = ZoneId.systemDefault();
-        LocalDateTime localDateTime = LocalDateTime.ofInstant(instant, zone);
-        tbCertkey.setEndTime(localDateTime);
-
-
+        tbCertkey.setEndTime(OtherUtil.getFromDate(end));
         this.save(tbCertkey);
         return tbCertkey;
     }
 
-    private String getDigest(byte[] contents){
-        SM3Digest sm3Digest = new SM3Digest();
-        sm3Digest.reset();
-        sm3Digest.update(contents,0,contents.length);
-        byte[] out = new byte[sm3Digest.getDigestSize()];
-        sm3Digest.doFinal(out,0);
-        return ByteUtils.toHexString(out);
+    @Override
+    public int getKeyID(String certKeyList) {
+        return 0;
     }
+
+
 }

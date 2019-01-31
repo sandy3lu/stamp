@@ -1,5 +1,6 @@
 package com.yunjing.eurekaclient2.web.service;
 
+import com.yunjing.eurekaclient2.web.entity.TbEseal;
 import com.yunjing.eurekaclient2.web.entity.TbEsealExpire;
 import com.baomidou.mybatisplus.extension.service.IService;
 
@@ -12,5 +13,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
  * @since 2019-01-30
  */
 public interface TbEsealExpireService extends IService<TbEsealExpire> {
+    TbEsealExpire get(int esSN);
 
+    boolean insert(TbEseal eseal);
 }

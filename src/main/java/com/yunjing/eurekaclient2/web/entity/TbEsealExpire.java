@@ -16,11 +16,13 @@ import lombok.experimental.Accessors;
  * @since 2019-01-30
  */
 @Data
-@EqualsAndHashCode(callSuper = true)
 @Accessors(chain = true)
-public class TbEsealExpire extends BaseEntity {
+public class TbEsealExpire {
 
     private static final long serialVersionUID = 1L;
+
+    private Integer id;
+
 
     /**
      * 电子印章标识
@@ -71,7 +73,7 @@ public class TbEsealExpire extends BaseEntity {
     /**
      * 印章数据
      */
-    private Blob content;
+    private String content;
 
     /**
      * 印章关联的密钥列表（支撑多证书）

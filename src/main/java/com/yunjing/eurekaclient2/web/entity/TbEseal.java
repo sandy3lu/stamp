@@ -75,7 +75,7 @@ public class TbEseal extends BaseEntity {
     /**
      * 印章数据
      */
-    private Blob content;
+    private String content;
 
     /**
      * 印章关联的密钥列表（支撑多证书）

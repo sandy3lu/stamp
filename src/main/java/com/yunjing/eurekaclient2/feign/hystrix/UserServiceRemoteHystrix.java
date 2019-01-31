@@ -20,4 +20,9 @@ public class UserServiceRemoteHystrix implements UserServiceRemote {
     public String getEnterpriseInfo(String userID) {
         return "UserServiceRemote, this message send failed !";
     }
+
+    @Override
+    public String getSelfInfo() {
+        return "UserServiceRemote, this message send failed !";
+    }
 }
