@@ -1,7 +1,6 @@
 package com.yunjing.eurekaclient2;
 
-import com.yunjing.eurekaclient2.stream.provider.IMessageProvider;
-import com.yunjing.eurekaclient2.stream.provider.MyMessageProvider;
+
 import com.yunjing.eurekaclient2.web.entity.DictConstant;
 import org.junit.Assert;
 import org.junit.Test;
@@ -29,11 +28,7 @@ public class EurekaClient2ApplicationTests {
     public void contextLoads() {
     }
 
-    @Resource
-    private IMessageProvider messageProvider;
 
-    @Resource
-    private MyMessageProvider myMessageProvider;
 
     /**
      * stream 测试
@@ -43,8 +38,7 @@ public class EurekaClient2ApplicationTests {
         DictConstant dictConstant = new DictConstant();
         dictConstant.setId(1); // 继承的属性值不发送
         dictConstant.setValue("hello world !");
-        messageProvider.send(dictConstant);
-        myMessageProvider.send(dictConstant);
+
     }
 
     /***

@@ -15,44 +15,6 @@ spring:
       discovery:
         enabled: true # 开启通过服务名发现配置中心
         service-id: config-server # 指定配置中心的service-id，便于扩展为高可用配置集群。
-    stream:
-      rabbit:
-        bindings:
-          my_input:
-            consumer:
-              bindingRoutingKey: myKey.* # 设置一个RoutingKey信息
-          my_output:
-            producer:
-              routing-key-expression: '''myKey.*''' # 定义 RoutingKey 的表达式配置
-      binders: # 在此处配置要绑定的rabbitmq的服务信息；
-        defaultRabbit: # 表示定义的名称，用于于binding整合
-          type: rabbit # 消息组件类型
-          environment: # 设置rabbitmq的相关的环境配置
-            spring:
-              rabbitmq:
-                addresses: 192.168.20.134
-                username: guest
-                password: guest
-                virtual-host: /
-      bindings: # 服务的整合处理
-        output: # 这个名字是一个通道的名称
-          destination: studyExchange # 表示要使用的Exchange名称定义
-          content-type: application/json # 设置消息类型，本次为对象json，如果是文本则设置“text/plain”
-          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
-        input: # 这个名字是一个通道的名称
-          destination: studyExchange # 表示要使用的Exchange名称定义
-          content-type: application/json # 设置消息类型，本次为对象json，如果是文本则设置“text/plain”
-          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
-          group: groupA # 指定分组名，防止负载时重复消费。（负载中分组名需设置不同值）PS：如有同时处理的需求，则不添加分组
-        my_output: # 这个名字是一个通道的名称，在分析具体源代码的时候会进行说明
-          destination: studyExchange # 表示要使用的Exchange名称定义
-          content-type: application/json # 设置消息类型，本次为对象json，如果是文本则设置“text/plain”
-          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
-        my_input: # 这个名字是一个通道的名称，在分析具体源代码的时候会进行说明
-          destination: studyExchange # 表示要使用的Exchange名称定义
-          content-type: application/json # 设置消息类型，本次为对象json，如果是文本则设置“text/plain”
-          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
-          group: myGroupA
 
 # 注册中心配置
 eureka:
