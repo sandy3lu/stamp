@@ -1,5 +1,8 @@
 package com.yunjing.eurekaclient2.common.utils;
 
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -63,5 +66,27 @@ public class OtherUtil {
         return field.between(startTime, endTime);
     }
 
+    /** 获取当前时间 + 30天*/
+    public static  LocalDateTime getReferenceDate(){
+        return  OtherUtil.plus(LocalDateTime.now(),30,ChronoUnit.DAYS);
+    }
+
+
+    /**
+     * 文件下载至web（字节流输出文本）
+     *
+     * @param response
+     * @param bytes
+     * @param fileName
+     * @throws IOException
+     */
+    public static void downloadFile(HttpServletResponse response, byte[] bytes, String fileName) throws IOException {
+        OutputStream os = response.getOutputStream();
+        response.setContentType("text/plain");
+        response.setHeader("Content-Disposition", "attachment; filename=" + fileName);
+        os.write(bytes);
+        os.flush();
+        os.close();
+    }
 
 }

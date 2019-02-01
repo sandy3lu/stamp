@@ -33,10 +33,13 @@ import java.util.List;
 public class TbCertkeyServiceImpl extends ServiceImpl<TbCertkeyMapper, TbCertkey> implements TbCertkeyService {
 
     @Override
-    public List<TbCertkey> getCertkey(String userID, String IDCard) {
+    public List<TbCertkey> getCertkey(String userID, String IDCard, boolean excludeScene) {
         QueryWrapper<TbCertkey> wrapper = new QueryWrapper<>();
         wrapper.eq("user_id",userID);
         wrapper.eq("id_card",IDCard);
+        if(excludeScene) {
+            wrapper.eq("is_scene", 0);
+        }
         wrapper.orderByAsc("end_time");
         //TODO: check order
         List<TbCertkey> list = this.list(wrapper);
@@ -49,7 +52,7 @@ public class TbCertkeyServiceImpl extends ServiceImpl<TbCertkeyMapper, TbCertkey
         TbCertkey tbCertkey = new TbCertkey();
         tbCertkey.setKeyId(keyindex);
         tbCertkey.setUserId(userID);
-        //TODO: base64 or URL base64 parse cert
+        //TODO: confirm with cert service base64 or URL base64 parse cert
         byte[] contents = Base64.getUrlDecoder().decode(cert);
         tbCertkey.setCert(new String(contents));
         tbCertkey.setCertHash(CryptoUtil.getDigest(contents));
@@ -58,7 +61,7 @@ public class TbCertkeyServiceImpl extends ServiceImpl<TbCertkeyMapper, TbCertkey
         BigInteger sn = x509Certificate.getSerialNumber();
         tbCertkey.setCertSn(sn.toString(16));
         Date end = x509Certificate.getNotAfter();
-        tbCertkey.setEndTime(OtherUtil.getFromDate(end));
+        tbCertkey.setValidEnd(OtherUtil.getFromDate(end));
         tbCertkey.setIdCard(IDCard);
         this.save(tbCertkey);
         return tbCertkey;
@@ -67,6 +70,13 @@ public class TbCertkeyServiceImpl extends ServiceImpl<TbCertkeyMapper, TbCertkey
     @Override
     public int getKeyID(String certKeyList) {
         return 0;
+    }
+
+    @Override
+    public TbCertkey getCertkey(int id) {
+        QueryWrapper<TbCertkey> wrapper = new QueryWrapper<>();
+        wrapper.eq("id",id);
+       return this.getOne(wrapper);
     }
 
 

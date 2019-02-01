@@ -1,6 +1,8 @@
 package com.yunjing.eurekaclient2.web.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yunjing.eurekaclient2.common.asn1.*;
 import com.yunjing.eurekaclient2.common.base.CertInfo;
 import com.yunjing.eurekaclient2.common.base.ResultInfo;
@@ -20,9 +22,12 @@ import com.yunjing.eurekaclient2.web.service.TbCertkeyService;
 import com.yunjing.eurekaclient2.web.service.TbEsealExpireService;
 import com.yunjing.eurekaclient2.web.service.TbEsealService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.yunjing.eurekaclient2.web.vo.StatisticsVO;
 import org.apache.http.HttpStatus;
 import org.bouncycastle.asn1.*;
 import org.bouncycastle.pqc.math.linearalgebra.ByteUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -38,7 +43,6 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
@@ -84,6 +88,12 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
     @Value("${user.define.pic.rech}")
     public String rech;
 
+    @Value("${user.define.pic.defaulth}")
+    public String defaulth;
+
+    @Value("${user.define.pic.defaultw}")
+    public String defaultw;
+
     @Value("${user.define.esid.prefix}")
     public String prefix;
 
@@ -105,34 +115,130 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
     private static ASN1ObjectIdentifier ID_SEALHOLDINGUNIT_ETHNICMINORITIESNAME = new ASN1ObjectIdentifier("1.2.156.112600.7.2");
     private static ASN1ObjectIdentifier ID_SEALHOLDINGUNIT_ENGLISHNAME = new ASN1ObjectIdentifier("1.2.156.112600.7.3");
     private static ASN1OctetString MAKINGUNITINFO = new DEROctetString("91110105061311021A 北京云京科技有限公司".getBytes());
+
     private static String makerPrivKey;
     private static String makerPubKey;
     private static byte[] makerCert;
 
+    protected Logger logger = LoggerFactory.getLogger(getClass());
 
-    @Override
-    public TbEseal generate(String creatorID, String creatorType, int type, String userID, String name, String usage,
-                            String esID, String pic, int createPicType, String validEnd, String isScene) throws CertificateException, NoSuchProviderException, IOException {
+    private TbEseal generatePersonalEsealBySelf(){
+        //TODO: Saas平台，个人申请个人章
+        return null;
+    }
 
-        String cardID="";
-        if(type == TYPE_PERSONAL){
-            cardID = esID;
-        }
+    private TbEseal generatePersonalEseal(String creatorID, String creatorType, int type, String userID, String name, String usage,
+            String esID, String pic, int createPicType, String validEnd, String isScene )throws CertificateException, NoSuchProviderException, IOException{
 
-        byte[] picdata= null;
-        if(pic.length()<10) {
-            // create pic
-            if (type == TYPE_PERSONAL) {
-                // personal stamp
+            String cardID=esID;
+
+            byte[] picdata= null;
+            if(pic.length()<10) {
+                // create pic
+
                 if ((createPicType == PIC_TYPE_OVAL) || (createPicType == PIC_TYPE_ROUND)) {
                     throw new RuntimeException("personal mush create square stamp");
                 }
+            }
 
-            } else {
-                // company stamp
-                if (createPicType == PIC_TYPE_PERSONAL) {
-                    throw new RuntimeException("company can not create square stamp");
+            //step 1 get signer cert
+            TbCertkey tbCertkey=null;
+
+            try {
+                switch (creatorType.toUpperCase()) {
+                    case USER_TYPE_OPERATOR:
+                        break;
+                    default:
+                        userID = creatorID;
                 }
+
+                if(isScene.toLowerCase().equals("true")){
+                    // apply scene cert for company or personal
+                    tbCertkey = applyPersonalCert(userID, isScene, usage, cardID);
+                }else{
+                    tbCertkey = checkValidPersonalCert(userID, cardID);
+                    if (tbCertkey == null) {
+                            tbCertkey = applyPersonalCert(userID,  isScene, usage, cardID);
+                    }
+                }
+
+            }catch (Exception e){
+                throw new RuntimeException(e.getMessage());
+            }
+
+            //step 2 get pic
+            switch (createPicType){
+                case PIC_TYPE_PERSONAL:
+                    // personal pic
+                    picdata = generatePersonalPic(usage);
+                    break;
+                default:
+                    picdata = Base64.getUrlDecoder().decode(pic);
+            }
+
+            //step 3 generate stamp
+            String picFormat=getImageFormat(picdata);
+            int width;
+            int height;
+
+            switch (createPicType){
+                case PIC_TYPE_PERSONAL:
+                    width = Integer.valueOf(recw,10);
+                    height = Integer.valueOf(rech,10);
+                    break;
+                default:
+                    width = Integer.valueOf(defaultw,10);
+                    height = Integer.valueOf(defaulth,10);
+            }
+            SESESPictrueInfo picinfo = pictrueInfoBuilder(picdata,picFormat,width,height);
+
+            // get esID from ID card number
+            esID = generatePersonalESID(esID);
+
+            SESeal seSeal = generateSeseal(esID,type,name,tbCertkey,picinfo);
+
+            // save to db
+            TbEseal tbEseal = new TbEseal();
+            tbEseal.setEsId(esID);
+            tbEseal.setCreatorId(creatorID);
+            // 企业替用户申请，归属在企业用户名下
+            tbEseal.setUserId(userID);
+            tbEseal.setName(name);
+            //个人姓名
+            tbEseal.setUsage(usage);
+            tbEseal.setType(type);
+            tbEseal.setStatus(STATUS_NORMAL);
+            tbEseal.setComment("");
+            try {
+                Date create = seSeal.getEsealInfo().getProperty().getCreateDate().getDate();
+                tbEseal.setCreateTime(OtherUtil.getFromDate(create));
+                Date end = seSeal.getEsealInfo().getProperty().getValidEnd().getDate();
+                tbEseal.setValidEnd(OtherUtil.getFromDate(end));
+            }catch(Exception e){
+                throw new RuntimeException("SESeal parse error: " + e.getMessage());
+            }
+            tbEseal.setContent(new String(seSeal.getEncoded()));
+            // certKey
+            Integer i = tbCertkey.getId();
+            //企业为个人用户，只申请一个证书
+            tbEseal.setCertKeyList(String.valueOf(i));
+            boolean result = this.save(tbEseal);
+            if(result) {
+                return tbEseal;
+            }else{
+                throw new RuntimeException("save to database error");
+            }
+
+    }
+
+    private TbEseal generateCompanyEseal(String creatorID, String creatorType, int type, String userID, String name, String usage,
+                            String esID, String pic, int createPicType, String validEnd, String isScene) throws CertificateException, NoSuchProviderException, IOException {
+
+        byte[] picdata= null;
+        if(pic.length()<10) {
+            // create pic company stamp
+            if (createPicType == PIC_TYPE_PERSONAL) {
+                throw new RuntimeException("company can not create square stamp");
             }
         }
 
@@ -141,32 +247,20 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
         boolean selfapply = true;
         try {
             switch (creatorType.toUpperCase()) {
-                case "OPERATOR":
+                case USER_TYPE_OPERATOR:
                     selfapply = false;
                     break;
                 default:
                     userID = creatorID;
             }
-
+            // TODO:后续扩展为多证书
             if(isScene.toLowerCase().equals("true")){
                 // apply scene cert for company or personal
-                if(type != TYPE_PERSONAL) {
-                    tbCertkey = applyCompanyCert(userID, isScene, selfapply);
-                }else {
-                    tbCertkey = applyPersonalCert(userID, isScene, usage, cardID);
-                }
+                tbCertkey = applyCompanyCert(userID, isScene, selfapply);
             }else{
-                if(type != TYPE_PERSONAL) {
-                    tbCertkey = checkValidCompanyCert(userID);
-                }else{
-                    tbCertkey = checkValidPersonalCert(userID, cardID);
-                }
+                tbCertkey = checkValidCompanyCert(userID);
                 if (tbCertkey == null) {
-                    if(type != TYPE_PERSONAL) {
-                        tbCertkey = applyCompanyCert(userID,  isScene,  selfapply);
-                    }else {
-                        tbCertkey = applyPersonalCert(userID,  isScene, usage, cardID);
-                    }
+                    tbCertkey = applyCompanyCert(userID,  isScene,  selfapply);
                 }
             }
 
@@ -182,10 +276,6 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
             case PIC_TYPE_ROUND:
                 // company pic
                 picdata = generateCompanyRoundPic(type,tbCertkey);
-                break;
-            case PIC_TYPE_PERSONAL:
-                // personal pic
-                picdata = generatePersonalPic(usage);
                 break;
             default:
                 picdata = Base64.getUrlDecoder().decode(pic);
@@ -204,21 +294,14 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
             case PIC_TYPE_ROUND:
                 width = height = Integer.valueOf(round,10);
                 break;
-            case PIC_TYPE_PERSONAL:
-                width = Integer.valueOf(recw,10);
-                height = Integer.valueOf(rech,10);
-                break;
-                default:
-                    width = Integer.valueOf(recw,10);
-                    height = Integer.valueOf(rech,10);
+
+            default:
+                width = Integer.valueOf(defaultw,10);
+                height = Integer.valueOf(defaulth,10);
 
         }
         SESESPictrueInfo picinfo = pictrueInfoBuilder(picdata,picFormat,width,height);
 
-        if(type == TYPE_PERSONAL){
-            // get esID from ID card number
-            esID = generatePersonalESID(esID);
-        }
         SESeal seSeal = generateSeseal(esID,type,name,tbCertkey,picinfo);
 
         // save to db
@@ -240,11 +323,29 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
             throw new RuntimeException("SESeal parse error: " + e.getMessage());
         }
         tbEseal.setContent(new String(seSeal.getEncoded()));
-        // certKey
+        //TODO: certKey,后续扩展为多证书
         Integer i = tbCertkey.getId();
         tbEseal.setCertKeyList(String.valueOf(i));
-        this.save(tbEseal);
-        return tbEseal;
+        boolean result = this.save(tbEseal);
+        if(result) {
+            return tbEseal;
+        }else{
+            throw new RuntimeException("save to database error");
+        }
+
+    }
+
+    @Override
+    public TbEseal generate(String creatorID, String creatorType, int type, String userID, String name, String usage,
+                            String esID, String pic, int createPicType, String validEnd, String isScene) throws CertificateException, NoSuchProviderException, IOException {
+
+
+        if(type == TYPE_PERSONAL){
+            return generatePersonalEseal(creatorID,creatorType,type,userID,name,usage,esID,pic,createPicType,validEnd,isScene);
+        }else{
+            return generateCompanyEseal(creatorID,creatorType,type,userID,name,usage,esID,pic,createPicType,validEnd,isScene);
+        }
+
     }
 
     @Override
@@ -264,57 +365,367 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
         boolean result = tbEsealExpireService.insert(eseal);
 
         if(result){
-            return this.removeById(eseal.getId());
+            boolean r = this.removeById(eseal.getId());
+            if(r){
+                return true;
+            }else{
+                throw new RuntimeException(eseal.getId() +" can not remove from Eseal ");
+            }
+        }else{
+            throw new RuntimeException( eseal.getId() + " can not insert to EsealExpire ");
         }
-        return false;
+
     }
 
     @Override
-    public TbEseal updateEseal(int oldEsSN) {
+    public TbEseal updateEseal(String userID,String userType,int oldEsSN, String validEnd) throws CertificateException, NoSuchProviderException, IOException {
         TbEseal tbEseal = get(oldEsSN);
-        String userID = null;
+
         int type = 0;
         String usage = null;
         String certList = null;
+        String oldUserID = null;
         if(tbEseal==null){
 
             TbEsealExpire tbEsealExpire = tbEsealExpireService.get(oldEsSN);
             if(tbEsealExpire == null){
                 throw new RuntimeException("could not find " + oldEsSN);
             }
-            userID = tbEsealExpire.getUserId();
+            oldUserID = tbEsealExpire.getUserId();
+
             type = tbEsealExpire.getType();
             usage = tbEsealExpire.getUsage();
             certList = tbEsealExpire.getCertKeyList();
+            // fill
+            tbEseal = new TbEseal();
+            tbEseal.setUserId(tbEsealExpire.getUserId());
+            tbEseal.setContent(tbEsealExpire.getContent());
+            tbEseal.setEsId(tbEsealExpire.getEsId());
+            tbEseal.setType(type);
+            tbEseal.setName(tbEsealExpire.getName());
+            tbEseal.setUsage(usage);
         }else{
-            userID = tbEseal.getUserId();
+            oldUserID = tbEseal.getUserId();
             type = tbEseal.getType();
             usage = tbEseal.getUsage();
             certList = tbEseal.getCertKeyList();
         }
 
+        // check authority
+        switch (userType){
+            case USER_TYPE_OPERATOR:
+                break;
+            default:
+                if(!userID.equals(oldUserID)){
+                    throw new RuntimeException(userID + " is not authorized to update " + oldEsSN);
+                }
+        }
+
         if(type == TYPE_PERSONAL){
-            // 企业更新 其帮助申请的 个人章
-            TbCertkey  tbCertkey = checkValidPersonalCert(userID);
+            //企业申请的个人章，里面只会包含一个证书，企业也不会为同一个人管理多个有效的章
+            int certid = Integer.valueOf(certList);
+            TbCertkey tbCertkey = tbCertkeyService.getCertkey(certid);
+            TbCertkey new_tbCertkey=null;
+            if(tbCertkey.getIsScene() == 0){
+                //判断个人证书的有效期
+                LocalDateTime end = tbCertkey.getValidEnd();
+                if(end.isBefore(OtherUtil.getReferenceDate())) {
+                    new_tbCertkey = applyPersonalCert(tbCertkey.getUserId(), "false", usage, tbCertkey.getIdCard());
+                }else{
+                    // 有效期还有多于30天, 不申请
+                    new_tbCertkey = tbCertkey;
+                }
+            }else{
+                //申请场景证书
+                new_tbCertkey = applyPersonalCert(tbCertkey.getUserId(),"true",usage,tbCertkey.getIdCard());
+            }
 
+            //替换old stamp中的证书，重新签名
+            return updatePersonalEseal(tbEseal,new_tbCertkey,userID,userType,validEnd);
         }else{
-            // 企业更新自己的章
-            TbCertkey  tbCertkey = checkValidCompanyCert(userID);
+            // 个人章与企业章的证书逻辑不同，企业有很多章，有可能别的章更新过了，已经有新的证书了，只是这个章没有，因此不能用old stamp的certlist去查
+            // 企业更新自己的章,找到最新的企业证书,不能用userID，这个可能是管理员替企业更新
+            TbCertkey  tbCertkey = checkValidCompanyCert(oldUserID);
+            if(tbCertkey == null){
+                // apply cert
+                //TODO: 目前只有一个证书，如果有多个证书，需要制定一个证书策略，用id_card 区分企业章里的不同用户证书
+                int certid = Integer.valueOf(certList);
+                TbCertkey old_tbCertkey = tbCertkeyService.getCertkey(certid);
+                String isScene = "false";
+                if(old_tbCertkey.getIsScene() != 0){
+                    isScene = "true";
+                }
+                if(userType.toUpperCase().equals(USER_TYPE_OPERATOR)){
+                    tbCertkey = applyCompanyCert(oldUserID,isScene,false);
+                }else{
+                    tbCertkey = applyCompanyCert(oldUserID,isScene,true);
+                }
 
+            }
+
+            //
+            return updateCompanyEseal(tbEseal,tbCertkey,userID,userType,validEnd);
         }
 
-        LocalDateTime end = tbCertkey.getEndTime();
-        LocalDateTime ref = OtherUtil.plus(LocalDateTime.now(),31, ChronoUnit.DAYS);
-        if(end.isBefore(ref)){
-            // apply cert
-
-            TbCertkey tbCertkey1 = applyCert(userID, type, String isScene, usage,String esID, boolean selfapply)
-
-        }
-
-
-        return null;
     }
+
+    @Override
+    public String getTypeName(Integer type) {
+        switch (type){
+            case TYPE_LEGAL_NAME:
+                return "电子法定名称章";
+            case TYPE_FINANCE:
+                return "电子财务专用章";
+            case TYPE_ENVOICE:
+                return "电子发票专用章";
+            case TYPE_CONTRACT:
+                return "电子合同专用章";
+            case TYPE_PERSONAL:
+                return "个人章";
+            default:
+                return "其他类型章";
+        }
+    }
+
+    @Override
+    public String getStatusName(Integer status) {
+        switch (status){
+            case STATUS_NORMAL:
+                return "使用中";
+            case STATUS_EXPIRE:
+                return "已过期";
+            case STATUS_FROZEN:
+                return "被冻结";
+            case STATUS_REVOKED:
+                return "被撤销";
+            default:
+                return "无法识别的状态";
+        }
+    }
+
+    @Override
+    public StatisticsVO getStatics(String userType, String userID) {
+        StatisticsVO s = new StatisticsVO();
+        int normal=0;
+        int expire=0;
+        int frozen = 0;
+        int revoked = 0;
+        int needRenew = 0;
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime ref = OtherUtil.getReferenceDate();
+
+        List<TbEseal> list = null;
+        switch (userType){
+            case USER_TYPE_OPERATOR:
+                // get all
+                list = this.list();
+                break;
+            default:
+                // get userid's stamp
+                QueryWrapper<TbEseal> wrapper = new QueryWrapper<>();
+                wrapper.eq("user_id",userID);
+                list = this.list(wrapper);
+        }
+
+        if((list == null) ||(list.size()<1)){
+            return s;
+        }
+        Iterator<TbEseal> it = list.iterator();
+        while(it.hasNext()){
+            TbEseal tbEseal = it.next();
+            int status = tbEseal.getStatus();
+            switch (status){
+                case STATUS_NORMAL:
+                    LocalDateTime date = tbEseal.getValidEnd();
+                    if(date.isBefore(now)){
+                        expire++;
+                        break;
+                    }else{
+                        if(date.isBefore(ref)){
+                            needRenew++;
+                            break;
+                        }
+                        normal++;
+                        break;
+                    }
+                case STATUS_EXPIRE:
+                    expire++;
+                    break;
+                case STATUS_FROZEN:
+                    frozen++;
+                    break;
+                case STATUS_REVOKED:
+                    revoked++;
+                    break;
+                default:
+
+            }
+        }
+
+        s.setExpire(expire);
+        s.setUsing(normal + needRenew);
+        s.setFrozen(frozen);
+        s.setNeedRenew(needRenew);
+        s.setRevoked(revoked);
+        return s;
+    }
+
+    @Override
+    public int checkExpire() {
+        int count = 0;
+        LocalDateTime now = LocalDateTime.now();
+            List<TbEseal> list = this.list();
+
+            if((list == null) ||(list.size()<1)){
+                return count;
+            }
+            Iterator<TbEseal> it = list.iterator();
+            while(it.hasNext()){
+                TbEseal tbEseal = it.next();
+                int status = tbEseal.getStatus();
+                switch (status){
+                    case STATUS_NORMAL:
+                        LocalDateTime date = tbEseal.getValidEnd();
+                        if(date.isBefore(now)){
+                            boolean result = expire(tbEseal);
+                            if(result){
+                                count++;
+                            }
+                        }
+                        break;
+                    case STATUS_EXPIRE:
+                        boolean result = expire(tbEseal);
+                        if(result){
+                            count++;
+                        }
+                        break;
+                    case STATUS_FROZEN:
+
+                        break;
+                    case STATUS_REVOKED:
+                        revoke(tbEseal,"by checkExpire ");
+                        break;
+                        default:
+
+                }
+            }
+        return count;
+    }
+
+    @Override
+    public IPage<TbEseal> selectPageVO(Page<TbEseal> pageInfo, Integer type, Integer status, String esId, String name, String userId, LocalDateTime ref) {
+
+        return this.baseMapper.selectPageVO(pageInfo,  type,  status,  esId,  name,  userId,ref);
+    }
+
+    @Transactional
+     boolean expire(TbEseal eseal){
+
+            // change status
+            eseal.setStatus(STATUS_EXPIRE);
+            boolean result = tbEsealExpireService.insert(eseal);
+            if(result){
+                boolean r = this.removeById(eseal.getId());
+                if(r){
+                    return true;
+                }else{
+                    logger.info(eseal.getId() +" can not remove from Eseal ");
+                }
+            }else{
+                logger.info( eseal.getId() + " can not insert to EsealExpire ");
+            }
+            return false;
+    }
+
+    private TbEseal updatePersonalEseal(TbEseal old_tbEseal,TbCertkey tbCertkey, String creatorID, String creatorType, String validEnd )throws CertificateException, NoSuchProviderException, IOException{
+
+
+            byte[] data = old_tbEseal.getContent().getBytes();
+            SESeal old_seSeal = SESeal.getInstance(data);
+            SESeal seSeal = generateSeseal(old_tbEseal.getEsId(),old_tbEseal.getType(),old_tbEseal.getName(),tbCertkey,old_seSeal.getEsealInfo().getPicture());
+
+            // save to db
+            TbEseal tbEseal = new TbEseal();
+            tbEseal.setEsId(old_tbEseal.getEsId());
+            //creator 有可能变更，以前是operator，后来是企业用户，或者反过来
+            tbEseal.setCreatorId(creatorID);
+            // userid不会变
+            tbEseal.setUserId(old_tbEseal.getUserId());
+            tbEseal.setName(old_tbEseal.getName());
+            //个人姓名
+            tbEseal.setUsage(old_tbEseal.getUsage());
+            tbEseal.setType(old_tbEseal.getType());
+            tbEseal.setStatus(STATUS_NORMAL);
+            tbEseal.setComment("");
+            try {
+                //新日期
+                Date create = seSeal.getEsealInfo().getProperty().getCreateDate().getDate();
+                tbEseal.setCreateTime(OtherUtil.getFromDate(create));
+                Date end = seSeal.getEsealInfo().getProperty().getValidEnd().getDate();
+                tbEseal.setValidEnd(OtherUtil.getFromDate(end));
+            }catch(Exception e){
+                throw new RuntimeException("SESeal parse error: " + e.getMessage());
+            }
+            tbEseal.setContent(new String(seSeal.getEncoded()));
+            // certKey
+            Integer i = tbCertkey.getId();
+            //企业为个人用户，只申请一个证书
+            tbEseal.setCertKeyList(String.valueOf(i));
+
+        boolean result = this.save(tbEseal);
+        if(result){
+            // 撤销旧印章
+            revoke(old_tbEseal,"renew by " + creatorID);
+            return tbEseal;
+        }else{
+            throw new RuntimeException("save to database error");
+        }
+
+    }
+
+
+
+    private TbEseal updateCompanyEseal(TbEseal old_tbEseal,TbCertkey tbCertkey, String creatorID, String creatorType,
+                                          String validEnd) throws CertificateException, NoSuchProviderException, IOException {
+
+        byte[] data = old_tbEseal.getContent().getBytes();
+        SESeal old_seSeal = SESeal.getInstance(data);
+        SESeal seSeal = generateSeseal(old_tbEseal.getEsId(),old_tbEseal.getType(),old_tbEseal.getName(),tbCertkey,old_seSeal.getEsealInfo().getPicture());
+
+        // save to db
+        TbEseal tbEseal = new TbEseal();
+        tbEseal.setEsId(old_tbEseal.getEsId());
+        tbEseal.setCreatorId(creatorID);
+        tbEseal.setUserId(old_tbEseal.getUserId());
+        tbEseal.setName(old_tbEseal.getName());
+        tbEseal.setUsage(old_tbEseal.getUsage());
+        tbEseal.setType(old_tbEseal.getType());
+        tbEseal.setStatus(STATUS_NORMAL);
+        tbEseal.setComment("");
+        try {
+            Date create = seSeal.getEsealInfo().getProperty().getCreateDate().getDate();
+            tbEseal.setCreateTime(OtherUtil.getFromDate(create));
+            Date end = seSeal.getEsealInfo().getProperty().getValidEnd().getDate();
+            tbEseal.setValidEnd(OtherUtil.getFromDate(end));
+        }catch(Exception e){
+            throw new RuntimeException("SESeal parse error: " + e.getMessage());
+        }
+        tbEseal.setContent(new String(seSeal.getEncoded()));
+        //TODO: certKey,后续扩展为多证书
+        Integer i = tbCertkey.getId();
+        tbEseal.setCertKeyList(String.valueOf(i));
+        boolean result = this.save(tbEseal);
+        if(result){
+            // 撤销旧印章
+            revoke(old_tbEseal,"renew by " + creatorID);
+            return tbEseal;
+        }else{
+            throw new RuntimeException("save to database error");
+        }
+
+    }
+
 
     private String generatePersonalESID(String esID) {
         // esID is personal card number
@@ -461,17 +872,19 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
     }
 
 
+
     private TbCertkey checkValidCompanyCert(String applierID){
 
-        List<TbCertkey> list = tbCertkeyService.getCertkey(applierID, "");
+        List<TbCertkey> list = tbCertkeyService.getCertkey(applierID, "",true);
         if((list == null) || (list.size()<1)){
             return null;
         }else{
             //TODO: make sure this will get the latest
             TbCertkey tbCertkey=list.get(0);
-            LocalDateTime end = tbCertkey.getEndTime();
-            if(end.isBefore(LocalDateTime.now())){
-                // cert is overdue, need apply a new cert
+            LocalDateTime end = tbCertkey.getValidEnd();
+
+            if(end.isBefore(OtherUtil.getReferenceDate())){
+                // cert is overdue or within 30 days, need apply a new cert
                 return null;
             }else{
                 // check cert
@@ -491,15 +904,15 @@ public class TbEsealServiceImpl extends ServiceImpl<TbEsealMapper, TbEseal> impl
 
     private TbCertkey checkValidPersonalCert(String applierID,String IDCard){
 
-        List<TbCertkey> list = tbCertkeyService.getCertkey(applierID, IDCard);
+        List<TbCertkey> list = tbCertkeyService.getCertkey(applierID, IDCard,true);
         if((list == null) || (list.size()<1)){
             return null;
         }else{
             //TODO: make sure this will get the latest
             TbCertkey tbCertkey=list.get(0);
-            LocalDateTime end = tbCertkey.getEndTime();
-            if(end.isBefore(LocalDateTime.now())){
-                // cert is overdue, need apply a new cert
+            LocalDateTime end = tbCertkey.getValidEnd();
+            if(end.isBefore(OtherUtil.getReferenceDate())){
+                // cert is overdue or within 30 days, need apply a new cert
                 return null;
             }else{
                 // check cert

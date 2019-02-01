@@ -1,5 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.yunjing.eurekaclient2.web.mapper.TbEsealMapper">
+    <select id="selectPageVO" resultType="com.yunjing.eurekaclient2.web.vo.TbEsealVO">
+        SELECT seal.id,seal.es_id as esID ,seal.name, seal.type, seal.user_id as userID, seal.create_time as createTime, seal.valid_end as validEnd,seal.status,
+        FROM tb_eseal seal
+        where seal.user_id = user_id
+        <if test="type != null and type==5">
+            and seal.type = 5
+        </if>
+        <if test="type != null and type!=5">
+            and seal.type <![CDATA[<]]> 5
+        </if>
+        <if test="type != null and type!=5">
+            and seal.type <![CDATA[<]]> 5
+        </if>
+        <if test="status != null">
+            and seal.status = #{status}
+        </if>
+        <if test="esId != null">
+            <bind name="esIdPattern" value="'%'+ esId +'%'"/>
+            and seal.es_id like #{esIdPattern}
+        </if>
+        <if test="name != null">
+            <bind name="namePattern" value="'%'+ name +'%'"/>
+            and seal.name like #{namePattern}
+        </if>
+        <if test="ref != null">
+            and seal.valid_end <![CDATA[<]]> #{ref}
+        </if>
+        order by seal.create_time
+    </select>
 
 </mapper>

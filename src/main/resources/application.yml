@@ -56,5 +56,7 @@ user:
       ovalh: 30
       recw: 18
       rech: 18
+      defaultw: 20
+      defaulth: 20
     esid:
       prefix: ESP

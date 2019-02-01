@@ -62,5 +62,5 @@ public class TbCertkey extends BaseEntity {
     /**
      * 证书有效期时间
      */
-    private LocalDateTime endTime;
+    private LocalDateTime validEnd;
 }

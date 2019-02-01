@@ -46,7 +46,7 @@ CREATE TABLE `tb_certkey`(
 `cert_hash` varchar(256) default null COMMENT '证书hash',
 `is_scene` int(1) not null COMMENT '是否为场景证书',
 `cert` blob not null COMMENT '证书数据',
-`end_time` datetime not null COMMENT '证书有效时间',
+`valid_end` datetime not null COMMENT '证书有效时间',
 `key_id` int not null COMMENT '证书关联的密钥id',
 `create_time` timestamp not null COMMENT '创建时间',
 PRIMARY KEY (`id`)
